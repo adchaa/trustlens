@@ -1,0 +1,35 @@
+# TrustLens Backend Dependencies
+# Install with: pip install -r requirements.txt
+
+# Web Framework
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.6
+
+# C2PA / Content Credentials
+c2pa-python>=0.30.0
+
+# Image Processing
+Pillow>=10.0.0
+numpy>=1.24.0
+
+# Metadata Extraction
+exifread>=3.0.0
+
+# AI / Gemini
+google-generativeai>=0.8.0
+
+# Source Credibility
+python-whois>=0.8.0
+requests>=2.31.0
+
+# Data Validation
+pydantic>=2.0.0
+
+# Environment
+python-dotenv>=1.0.0
+
+# Optional: For more advanced features
+# opencv-python>=4.8.0  # Advanced image analysis
+# face-recognition>=1.3.0  # Deepfake detection
+# tineye>=1.0.0  # Reverse image search
