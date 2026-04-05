@@ -65,27 +65,31 @@ def validate_file_url(url: str) -> tuple[str, str]:
     filename = Path(path).name
     
     if not filename:
-        raise HTTPException(400, "Could not extract filename from URL")
+        # Try to generate a filename if URL has no path
+        filename = "downloaded_file"
     
     ext = Path(filename).suffix.lower()
     
+    # Check if extension is supported
     for category, extensions in ALLOWED_EXTENSIONS.items():
         if ext in extensions:
             return filename, category
     
-    raise HTTPException(
-        400, 
-        f"Unsupported file type: {ext}. Supported: {list(ALLOWED_EXTENSIONS.keys())}"
-    )
+    # If no valid extension found, try to infer from URL or default to image
+    # This handles URLs like "https://example.com/image?id=123" without extension
+    if not ext or ext not in [e for exts in ALLOWED_EXTENSIONS.values() for e in exts]:
+        # Default to image category - we'll verify content-type after download
+        return filename if ext else f"{filename}.jpg", "image"
 
 
-async def download_file(url: str) -> bytes:
-    """Download file from URL with timeout."""
+async def download_file(url: str) -> tuple[bytes, str | None]:
+    """Download file from URL with timeout. Returns (content, content_type)."""
     try:
         async with httpx.AsyncClient(timeout=DOWNLOAD_TIMEOUT, follow_redirects=True) as client:
             response = await client.get(str(url))
             response.raise_for_status()
-            return response.content
+            content_type = response.headers.get("content-type", "").split(";")[0].strip()
+            return response.content, content_type
     except httpx.TimeoutException:
         raise HTTPException(400, f"Download timed out after {DOWNLOAD_TIMEOUT} seconds")
     except httpx.HTTPStatusError as e:
@@ -140,7 +144,18 @@ async def analyze_content_endpoint(request: AnalysisRequest):
     filename, file_type = validate_file_url(str(request.file_url))
     
     # Download file from URL
-    content = await download_file(str(request.file_url))
+    content, content_type = await download_file(str(request.file_url))
+    
+    # Infer file type from content-type header if we defaulted earlier
+    if content_type:
+        if content_type.startswith("image/"):
+            file_type = "image"
+        elif content_type.startswith("video/"):
+            file_type = "video"
+        elif content_type.startswith("audio/"):
+            file_type = "audio"
+        elif content_type == "application/pdf":
+            file_type = "document"
     
     # Check file size
     if len(content) > MAX_FILE_SIZE_MB * 1024 * 1024:
@@ -155,7 +170,8 @@ async def analyze_content_endpoint(request: AnalysisRequest):
         # Write file
         temp_path.write_bytes(content)
         
-        mime_type = get_mime_type(filename)
+        # Use content-type from response if available, otherwise guess from filename
+        mime_type = content_type if content_type else get_mime_type(filename)
         
         # Run analysis pipeline
         # 1. Provenance check

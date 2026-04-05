@@ -23,7 +23,7 @@ function App() {
     if (!fileUrl.trim()) return;
 
     const parsedConfidence =
-      confidence.trim() === '' ? undefined : Number(confidence);
+      confidence.trim() === '' ? undefined : Math.round(Number(confidence));
 
     if (
       parsedConfidence !== undefined &&

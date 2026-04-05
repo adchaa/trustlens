@@ -1,0 +1,586 @@
+{
+  "name": "Social Media Post Trust Analysis",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2416,
+        256
+      ],
+      "id": "d85c0ab1-da19-403f-a1a0-42f7fa27d016",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.first().json.body"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -448,
+        432
+      ],
+      "id": "cdb7dfe5-aaaf-4d23-a185-274dc8cf9aa6",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "48250631-d225-4a3c-a10b-6fdb2edf046e",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -800,
+        432
+      ],
+      "id": "ce3f0d2e-d9d8-4301-a2a9-7ec18ed04ccb",
+      "name": "Webhook",
+      "webhookId": "48250631-d225-4a3c-a10b-6fdb2edf046e"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prevData = $('Format Classification').first().json;\nconst microserviceResponse = $input.first().json;\n\nconst labelColorMap = {\n  VERIFIED_TRUE:       'green',\n  PARTIALLY_TRUE:      'yellow',\n  MISLEADING:          'orange',\n  FALSE:               'red',\n  UNVERIFIED:          'gray',\n  MANIPULATED_CONTENT: 'darkred'\n};\n\n// Fallback: microservice unavailable\nif (!microserviceResponse.success) {\n  return [{\n    json: {\n      mode:        'normal_fallback',\n      status:      'COMPLETED',\n      note:        'Microservice failed \u2014 returning agent classification.',\n      post_id:     prevData.post_id,\n      label:       prevData.label,\n      label_color: prevData.label_color,\n      label_score: prevData.label_score,\n      confidence:  prevData.confidence,\n      reasoning:   prevData.reasoning\n    }\n  }];\n}\n\nconst trustCard   = microserviceResponse.trust_card;\nconst baseScore   = prevData.label_score;\nconst sourceScore = trustCard.detailed_scores.source ?? 50;\n\n// Weighted deep score: agent classification (40%) + forensics (60%)\nconst deepScore =\n  baseScore                            * 0.40 +\n  trustCard.detailed_scores.provenance * 0.15 +\n  trustCard.detailed_scores.content    * 0.25 +\n  trustCard.detailed_scores.context    * 0.15 +\n  sourceScore                          * 0.05;\n\n// Map numeric deep score back to a label\nlet deepLabel;\nif      (deepScore >= 80) deepLabel = 'VERIFIED_TRUE';\nelse if (deepScore >= 60) deepLabel = 'PARTIALLY_TRUE';\nelse if (deepScore >= 40) deepLabel = 'UNVERIFIED';\nelse if (deepScore >= 20) deepLabel = 'MISLEADING';\nelse                       deepLabel = 'FALSE';\n\n// Forensics override: manipulation always wins\nif (\n  trustCard.content_analysis?.manipulation_detected ||\n  trustCard.content_analysis?.ai_generated\n) {\n  deepLabel = 'MANIPULATED_CONTENT';\n}\n\nreturn [{\n  json: {\n    mode:        'deep',\n    status:      'COMPLETED',\n    post_id:     prevData.post_id,\n    label:       deepLabel,\n    label_color: labelColorMap[deepLabel],\n    label_score: Math.round(deepScore),\n    base_label:  prevData.label,\n    confidence:  trustCard.confidence,\n    summary_bullets: trustCard.summary_bullets,\n    forensics: {\n      manipulation_detected: trustCard.content_analysis.manipulation_detected,\n      ai_generated:          trustCard.content_analysis.ai_generated,\n      has_metadata:          trustCard.provenance.has_exif || trustCard.provenance.has_c2pa,\n      suspicious_signs:      trustCard.provenance.suspicious_signs,\n      ela_suspicious:        trustCard.content_analysis.ela_suspicious\n    },\n    reasoning:          prevData.reasoning,\n    processing_time_ms: microserviceResponse.processing_time_ms\n  }\n}];"
+      },
+      "id": "cf177111-d8ab-4b50-aaa5-7c0accfd34f5",
+      "name": "Compute Deep Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2384,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://voeon-196-229-166-221.run.pinggy-free.link/analyze",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"file_url\": \"{{ $json.media_url }}\",\n\"caption\": \"{{ $json.caption }}\",\n  \"alt_text\": \"{{ $json.alt_text }}\",\n  \"post_id\": \"{{ $json.post_id }}\",\n  \"claim_detected\": \"{{ $json.claim_detected }}\",\n  \"category\": \"{{ $json.category }}\",\n  \"confidence\": \"{{ $json.confidence }}\",\n  \"reasoning\": \"{{ $json.reasoning }}\",\n  \"deep_mode\": \"{{ $json.deep_mode }}\",\n  \"claimed_date\": \"{{ $json.claimed_date }}\",\n  \"claimed_location\": \"{{ $json.claimed_location }}\",\n  \"context_claims\": []\n}",
+        "options": {}
+      },
+      "id": "625a503d-2a76-4a88-961d-42ce9ad11911",
+      "name": "Microservice Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        2128,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-deep",
+              "leftValue": "={{ $json.deep_mode }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8cf0ba93-d5b4-42d1-aa5b-c100b0f1b0a6",
+      "name": "Deep Mode?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the agent's JSON output and reshape it for downstream nodes\nconst agentOutput = $input.first().json.output || '';\nconst extractData = $('Extract Content').first().json;\n\nlet parsed;\n\ntry {\n  const clean = agentOutput.replace(/```json|```/g, '').trim();\n  parsed = JSON.parse(clean);\n} catch (e) {\n  const match = agentOutput.match(/\\{[\\s\\S]*\\}/);\n  parsed = match ? JSON.parse(match[0]) : {};\n}\n\nreturn [\n  {\n    json: {...parsed,...extractData}\n  }\n];"
+      },
+      "id": "73c5ed84-2ee2-4b01-ad14-8d3acac33b9d",
+      "name": "Format Classification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1472,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://newsapi.org/v2/everything",
+        "sendQuery": true,
+        "parametersQuery": {
+          "values": [
+            {
+              "name": "q"
+            },
+            {
+              "name": "apiKey",
+              "valueProvider": "fieldValue",
+              "value": "d3160f465dd34acf86a6a2aa69e40a57"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "parametersHeaders": {
+          "values": [
+            {
+              "name": "X-Api-Key",
+              "valueProvider": "fieldValue",
+              "value": "d3160f465dd34acf86a6a2aa69e40a57"
+            }
+          ]
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "id": "8dcb1e9f-9437-4bce-b8b4-6bf25ba73823",
+      "name": "News API Tool",
+      "position": [
+        1264,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://factchecktools.googleapis.com/v1alpha1/claims:search",
+        "sendQuery": true,
+        "parametersQuery": {
+          "values": [
+            {
+              "name": "query"
+            },
+            {
+              "name": "key",
+              "valueProvider": "fieldValue",
+              "value": "AIzaSyCkVk3zlLpqWXZDyHK1uql6NgCtP9J8dkg"
+            }
+          ]
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "id": "b58f043e-3b95-4f88-8da6-a82140f6207f",
+      "name": "Fact Check Tool",
+      "position": [
+        816,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "gemini-2.5-flash-preview-04-17",
+        "options": {
+          "temperature": 0.1
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "id": "029bf002-08a8-4ce4-9169-df9bbf37e812",
+      "name": "Gemini 2.5 Flash",
+      "position": [
+        1040,
+        576
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "gemini-api-key",
+          "name": "Google Gemini API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are an AI system specialized in detecting misinformation on social media.\n\nYour task is to analyze a social media post and determine its trustworthiness by using the outputs from the available verification tools (Fact Check APIs, News sources, etc.).\n\nPOST DATA:\nCaption: {{ $json.caption }}\nAlt text: {{ $json.alt_text || 'None provided' }}\n\nINSTRUCTIONS:\n1. Analyze the claim contained in the caption or alt text.\n2. Use the evidence returned by the verification tools.\n3. Determine the trust category of the post.\n\nPossible categories:\n- VERIFIED_TRUE \u2192 Reliable information confirmed by credible sources\n- LIKELY_TRUE \u2192 Seems accurate but not fully verified\n- UNCERTAIN \u2192 Insufficient evidence\n- MISLEADING \u2192 Contains partial misinformation or misleading context\n- LIKELY_FALSE \u2192 Strong indications the claim is false\n- FALSE \u2192 Confirmed misinformation or debunked claim\n\nReturn ONLY a valid JSON object with the following structure:\n\n{\n  \"claim_detected\": \"string summarizing the main claim\",\n  \"category\": \"VERIFIED_TRUE | LIKELY_TRUE | UNCERTAIN | MISLEADING | LIKELY_FALSE | FALSE\",\n  \"confidence\": 0-100,\n  \"reasoning\": \"short explanation referencing evidence from tools\",\n  \"tool_evidence\": {\n    \"fact_check\": \"summary of fact-check results if available\",\n    \"news_sources\": \"summary of relevant news if available\"\n  }\n}\n\nRules:\n- Do NOT return any text outside the JSON.\n- If no clear claim exists, set category to UNCERTAIN.\n- Confidence must be an integer between 0 and 100.",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "id": "3423b8f2-24e2-46a1-93a9-031ac9d3918f",
+      "name": "Trust Classifier Agent",
+      "position": [
+        1040,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const post = $input.first().json;\nreturn [{\n  json: {\n    post_id: $('Code in JavaScript').first().json.post_id || null,\n    caption: $('Code in JavaScript').first().json.caption || '',\n    alt_text: $('Code in JavaScript').first().json.alt_text || null,\n    deep_mode: $('Code in JavaScript').first().json.deep_mode || false,\n    claimed_date: $('Code in JavaScript').first().json.claimed_date || null,\n    claimed_location :  $('Code in JavaScript').first().json.claimed_location || null,\n    media_url : $('Code in JavaScript').first().json.media_url || null,\n  }\n}];"
+      },
+      "id": "dda9c5c2-8c69-4f5f-894c-d17302045f38",
+      "name": "Extract Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        368
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "b6789002-81fa-4ee2-bf4a-a1e9d15910e6",
+      "name": "Skip - Not News Related",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        592,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-news",
+              "leftValue": "={{ $json.candidates[0].content.parts[0].text.trim().toLowerCase() }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "93193777-993d-45e7-b6ff-df293c184984",
+      "name": "News Origin Gate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        368,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent?key=AIzaSyDxsCSfdC8TFiIItcGBMRw0pcgq8ayixgE",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"system_instruction\": {\n    \"parts\": [{\"text\": \"You are a news classifier. Respond ONLY with 'true' if the post mentions or links to a news article, current event, reported incident, or factual reporting (even if brief). Respond ONLY with 'false' if it's purely personal, spam, promotional, meme, or entirely unrelated to news. Err on the side of 'true' for anything that could be a news headline or article excerpt.\"}]\n  },\n  \"contents\": [\n    {\n      \"role\": \"user\",\n      \"parts\": [{\"text\": \"Post caption: {{$json.caption}}\\nAlt text: {{$json.alt_text || 'No alt text provided'}}\\n\\nIs this news related?\"}]\n    }\n  ],\n  \"generationConfig\": {\n    \"temperature\": 0.1,\n    \"maxOutputTokens\": 10\n  }\n}",
+        "options": {}
+      },
+      "id": "138a8cba-cd90-4472-9157-a40f84b1b607",
+      "name": "Check if News Related",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -16,
+        208
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "f8343709-18ac-4a20-b27f-67ea0979cd45",
+      "name": "Skip - Private Account",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-privacy",
+              "leftValue": "={{ $json.is_private }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "227c8477-eb1e-4cc3-8766-b330690fa1a5",
+      "name": "Privacy Gate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        208
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "ecf8b14b-85df-4a6e-8d37-9b82c8482664",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -448,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2560,
+        544
+      ],
+      "id": "37b87f55-ab48-4206-a192-251750bfbff2",
+      "name": "Respond to Webhook1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Microservice Call": {
+      "main": [
+        [
+          {
+            "node": "Compute Deep Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deep Mode?": {
+      "main": [
+        [
+          {
+            "node": "Microservice Call",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Classification": {
+      "main": [
+        [
+          {
+            "node": "Deep Mode?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trust Classifier Agent": {
+      "main": [
+        [
+          {
+            "node": "Format Classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "News API Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Trust Classifier Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fact Check Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Trust Classifier Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Content": {
+      "main": [
+        [
+          {
+            "node": "Trust Classifier Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "News Origin Gate": {
+      "main": [
+        [
+          {
+            "node": "Extract Content",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip - Not News Related",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check if News Related": {
+      "main": [
+        [
+          {
+            "node": "News Origin Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Privacy Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Privacy Gate": {
+      "main": [
+        [
+          {
+            "node": "Skip - Private Account",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check if News Related",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Privacy Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip - Private Account": {
+      "main": [
+        []
+      ]
+    },
+    "Compute Deep Score": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini 2.5 Flash": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Trust Classifier Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "9e792410-a7be-444a-9696-48dbe0d93f1b",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "26aa5c28f7111a938d9889892d6db081e904ec633bfa867af4ae8e68ecceb86b"
+  },
+  "id": "IjCd1F2zQcJ4S1H3",
+  "tags": []
+}
