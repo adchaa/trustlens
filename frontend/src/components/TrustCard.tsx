@@ -221,6 +221,18 @@ export function TrustCard({ data, fileName, processingTime }: TrustCardProps) {
                 {data.content_analysis.ela_suspicious ? 'Suspicious' : 'Normal'}
               </span>
             </div>
+            <div className="flex justify-between">
+              <span className="text-gray-600">Face Detection</span>
+              <span className={data.content_analysis.face_detected ? 'text-green-600' : 'text-gray-400'}>
+                {data.content_analysis.face_detected ? 'Face found' : 'No face found'}
+              </span>
+            </div>
+            {data.content_analysis.face_detected && (
+              <div className="flex justify-between">
+                <span className="text-gray-600">Deepfake Heuristic Confidence</span>
+                <span>{data.content_analysis.deepfake_confidence}%</span>
+              </div>
+            )}
             {data.content_analysis.manipulation_signs.length > 0 && (
               <div className="mt-2 p-2 bg-red-50 rounded">
                 <p className="text-red-800 font-medium">Manipulation Signs:</p>
@@ -236,6 +248,16 @@ export function TrustCard({ data, fileName, processingTime }: TrustCardProps) {
                 <p className="text-purple-800 font-medium">AI Generation Signs:</p>
                 <ul className="list-disc list-inside text-purple-700">
                   {data.content_analysis.ai_generation_signs.map((sign, i) => (
+                    <li key={i}>{sign}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {data.content_analysis.deepfake_indicators.length > 0 && (
+              <div className="mt-2 p-2 bg-orange-50 rounded">
+                <p className="text-orange-800 font-medium">Face Heuristic Indicators:</p>
+                <ul className="list-disc list-inside text-orange-700">
+                  {data.content_analysis.deepfake_indicators.map((sign, i) => (
                     <li key={i}>{sign}</li>
                   ))}
                 </ul>
@@ -278,6 +300,16 @@ export function TrustCard({ data, fileName, processingTime }: TrustCardProps) {
                 <ul className="list-disc list-inside text-red-700">
                   {data.context.inconsistencies.map((inc, i) => (
                     <li key={i}>{inc}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {data.context.reverse_search_matches.length > 0 && (
+              <div className="mt-2 p-2 bg-indigo-50 rounded">
+                <p className="text-indigo-800 font-medium">Reverse Search Matches:</p>
+                <ul className="list-disc list-inside text-indigo-700 break-all">
+                  {data.context.reverse_search_matches.map((match, i) => (
+                    <li key={i}>{match}</li>
                   ))}
                 </ul>
               </div>

@@ -23,6 +23,9 @@ def calculate_content_score(content_result: ContentAnalysisResult) -> int:
     
     if content_result.ai_generated:
         score -= 30
+
+    if content_result.deepfake_indicators:
+        score -= min(15, 5 * len(content_result.deepfake_indicators))
     
     if content_result.ela_suspicious:
         score -= 15
@@ -76,12 +79,17 @@ def generate_summary_bullets(
     
     if content.ai_generated:
         bullets.append("Content appears AI-generated")
+    elif content.deepfake_indicators:
+        bullets.append("Face heuristics found synthetic-image indicators")
     
     # Context bullets
     if context.context_match and context.confidence >= 70:
         bullets.append("Context matches claimed content")
     elif not context.context_match:
         bullets.append("Context inconsistencies found")
+
+    if context.reverse_search_matches:
+        bullets.append("Reverse image search found web matches")
     
     # Suspicious signs
     if provenance.suspicious_signs:
@@ -141,6 +149,9 @@ def generate_trust_card(
     
     if not context.context_match and context.confidence >= 80:
         final_score -= 10  # High confidence context mismatch
+
+    if context.reverse_search_matches and not context.context_match:
+        final_score -= 5
     
     # Bonus for strong provenance
     if provenance.has_c2pa and provenance.c2pa_valid:

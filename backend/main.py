@@ -9,8 +9,10 @@ import uuid
 import mimetypes
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse, unquote
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+import httpx
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -34,6 +36,9 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Download timeout in seconds
+DOWNLOAD_TIMEOUT = 30
+
 # CORS middleware for frontend
 app.add_middleware(
     CORSMiddleware,
@@ -50,21 +55,43 @@ def get_mime_type(filename: str) -> str:
     return mime_type or "application/octet-stream"
 
 
-def validate_file(file: UploadFile) -> str:
-    """Validate uploaded file and return file type category."""
-    if not file.filename:
-        raise HTTPException(400, "No filename provided")
+def validate_file_url(url: str) -> tuple[str, str]:
+    """
+    Validate file URL and return (filename, file_type_category).
+    Extracts filename from URL path.
+    """
+    parsed = urlparse(str(url))
+    path = unquote(parsed.path)
+    filename = Path(path).name
     
-    ext = Path(file.filename).suffix.lower()
+    if not filename:
+        raise HTTPException(400, "Could not extract filename from URL")
+    
+    ext = Path(filename).suffix.lower()
     
     for category, extensions in ALLOWED_EXTENSIONS.items():
         if ext in extensions:
-            return category
+            return filename, category
     
     raise HTTPException(
         400, 
         f"Unsupported file type: {ext}. Supported: {list(ALLOWED_EXTENSIONS.keys())}"
     )
+
+
+async def download_file(url: str) -> bytes:
+    """Download file from URL with timeout."""
+    try:
+        async with httpx.AsyncClient(timeout=DOWNLOAD_TIMEOUT, follow_redirects=True) as client:
+            response = await client.get(str(url))
+            response.raise_for_status()
+            return response.content
+    except httpx.TimeoutException:
+        raise HTTPException(400, f"Download timed out after {DOWNLOAD_TIMEOUT} seconds")
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(400, f"Failed to download file: HTTP {e.response.status_code}")
+    except httpx.RequestError as e:
+        raise HTTPException(400, f"Failed to download file: {str(e)}")
 
 
 @app.get("/")
@@ -75,7 +102,7 @@ async def root():
         "status": "running",
         "version": "1.0.0",
         "endpoints": {
-            "analyze": "POST /analyze - Analyze uploaded content",
+            "analyze": "POST /analyze - Analyze content from URL",
             "health": "GET /health - Health check"
         }
     }
@@ -94,15 +121,9 @@ async def health_check():
 
 
 @app.post("/analyze", response_model=AnalysisResponse)
-async def analyze_content_endpoint(
-    file: UploadFile = File(..., description="Media file to analyze"),
-    caption: Optional[str] = Form(None, description="Caption or claim about the content"),
-    claimed_date: Optional[str] = Form(None, description="Claimed date of content"),
-    claimed_location: Optional[str] = Form(None, description="Claimed location"),
-    source_url: Optional[str] = Form(None, description="Source URL")
-):
+async def analyze_content_endpoint(request: AnalysisRequest):
     """
-    Analyze uploaded content for authenticity.
+    Analyze content from URL for authenticity.
     
     This endpoint performs comprehensive analysis including:
     - Provenance check (C2PA, EXIF metadata)
@@ -112,26 +133,29 @@ async def analyze_content_endpoint(
     
     Returns a TrustCard with verdict, confidence score, and detailed analysis.
     """
+    print(request)
     start_time = time.time()
     
-    # Validate file
-    file_type = validate_file(file)
+    # Validate file URL and get filename/type
+    filename, file_type = validate_file_url(str(request.file_url))
+    
+    # Download file from URL
+    content = await download_file(str(request.file_url))
     
     # Check file size
-    content = await file.read()
     if len(content) > MAX_FILE_SIZE_MB * 1024 * 1024:
         raise HTTPException(400, f"File too large. Maximum size: {MAX_FILE_SIZE_MB}MB")
     
     # Save file temporarily
     file_id = str(uuid.uuid4())
-    file_ext = Path(file.filename).suffix
+    file_ext = Path(filename).suffix
     temp_path = UPLOAD_DIR / f"{file_id}{file_ext}"
     
     try:
         # Write file
         temp_path.write_bytes(content)
         
-        mime_type = get_mime_type(file.filename)
+        mime_type = get_mime_type(filename)
         
         # Run analysis pipeline
         # 1. Provenance check
@@ -139,7 +163,13 @@ async def analyze_content_endpoint(
         
         # 2. Content analysis (only for images/videos for now)
         if file_type in ["image", "video"]:
-            content_result = analyze_content(str(temp_path), mime_type)
+            content_result = analyze_content(
+                str(temp_path),
+                mime_type,
+                alt_text=request.alt_text,
+                potential_category=request.category,
+                model_confidence=request.confidence,
+            )
         else:
             from models.schemas import ContentAnalysisResult
             content_result = ContentAnalysisResult(
@@ -149,16 +179,17 @@ async def analyze_content_endpoint(
         # 3. Context verification
         context_result = verify_context(
             file_path=str(temp_path),
-            caption=caption,
-            claimed_date=claimed_date,
-            claimed_location=claimed_location,
+            caption=request.caption,
+            claimed_date=request.claimed_date,
+            claimed_location=request.claimed_location,
+            alt_text=request.alt_text,
             mime_type=mime_type
         )
         
         # 4. Source credibility (if URL provided)
         source_result = None
-        if source_url:
-            source_result = check_source(url=source_url, claim=caption)
+        if request.source_url:
+            source_result = check_source(url=request.source_url, claim=request.caption)
         
         # 5. Generate trust card
         trust_card = generate_trust_card(
@@ -172,7 +203,7 @@ async def analyze_content_endpoint(
         
         return AnalysisResponse(
             success=True,
-            file_name=file.filename,
+            file_name=filename,
             file_type=file_type,
             trust_card=trust_card,
             processing_time_ms=processing_time
@@ -183,48 +214,6 @@ async def analyze_content_endpoint(
     
     finally:
         # Cleanup temp file
-        if temp_path.exists():
-            temp_path.unlink()
-
-
-@app.post("/analyze/quick")
-async def quick_analyze(
-    file: UploadFile = File(...),
-):
-    """
-    Quick analysis - only provenance and basic content check.
-    Faster but less comprehensive than full analysis.
-    """
-    start_time = time.time()
-    
-    file_type = validate_file(file)
-    content = await file.read()
-    
-    file_id = str(uuid.uuid4())
-    file_ext = Path(file.filename).suffix
-    temp_path = UPLOAD_DIR / f"{file_id}{file_ext}"
-    
-    try:
-        temp_path.write_bytes(content)
-        
-        # Only provenance check
-        provenance_result = check_provenance(str(temp_path))
-        
-        processing_time = int((time.time() - start_time) * 1000)
-        
-        return {
-            "success": True,
-            "file_name": file.filename,
-            "quick_verdict": "VERIFIED" if provenance_result.provenance_score >= 75 else 
-                            "UNCERTAIN" if provenance_result.provenance_score >= 50 else "SUSPICIOUS",
-            "provenance_score": provenance_result.provenance_score,
-            "has_c2pa": provenance_result.has_c2pa,
-            "has_exif": provenance_result.has_exif,
-            "explanation": provenance_result.explanation,
-            "processing_time_ms": processing_time
-        }
-        
-    finally:
         if temp_path.exists():
             temp_path.unlink()
 

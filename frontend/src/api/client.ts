@@ -3,11 +3,14 @@ import axios from 'axios';
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export interface AnalysisRequest {
-  file: File;
+  fileUrl: string;
   caption?: string;
   claimedDate?: string;
   claimedLocation?: string;
   sourceUrl?: string;
+  altText?: string;
+  category?: string;
+  confidence?: number;
 }
 
 export interface TrustCard {
@@ -37,6 +40,9 @@ export interface TrustCard {
     manipulation_detected: boolean;
     ai_generated: boolean;
     confidence: number;
+    face_detected: boolean;
+    deepfake_confidence: number;
+    deepfake_indicators: string[];
     manipulation_signs: string[];
     ai_generation_signs: string[];
     ela_suspicious: boolean;
@@ -48,6 +54,7 @@ export interface TrustCard {
     caption_matches_content: boolean;
     detected_elements: string[];
     inconsistencies: string[];
+    reverse_search_matches: string[];
     explanation: string;
   };
   source: {
@@ -69,28 +76,21 @@ export interface AnalysisResponse {
 }
 
 export async function analyzeContent(request: AnalysisRequest): Promise<AnalysisResponse> {
-  const formData = new FormData();
-  formData.append('file', request.file);
-  
-  if (request.caption) {
-    formData.append('caption', request.caption);
-  }
-  if (request.claimedDate) {
-    formData.append('claimed_date', request.claimedDate);
-  }
-  if (request.claimedLocation) {
-    formData.append('claimed_location', request.claimedLocation);
-  }
-  if (request.sourceUrl) {
-    formData.append('source_url', request.sourceUrl);
-  }
-
   const response = await axios.post<AnalysisResponse>(
     `${API_BASE_URL}/analyze`,
-    formData,
+    {
+      file_url: request.fileUrl,
+      caption: request.caption,
+      claimed_date: request.claimedDate,
+      claimed_location: request.claimedLocation,
+      source_url: request.sourceUrl,
+      alt_text: request.altText,
+      category: request.category,
+      confidence: request.confidence,
+    },
     {
       headers: {
-        'Content-Type': 'multipart/form-data',
+        'Content-Type': 'application/json',
       },
     }
   );

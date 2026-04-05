@@ -1,12 +1,11 @@
 import { useState } from 'react';
-import { Shield, AlertCircle } from 'lucide-react';
-import { UploadZone } from './components/Upload';
+import { Shield, AlertCircle, Link } from 'lucide-react';
 import { Loading } from './components/Loading';
 import { TrustCard } from './components/TrustCard';
 import { analyzeContent, AnalysisResponse } from './api/client';
 
 function App() {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileUrl, setFileUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -16,26 +15,37 @@ function App() {
   const [claimedDate, setClaimedDate] = useState('');
   const [claimedLocation, setClaimedLocation] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
-
-  const handleFileSelect = (file: File) => {
-    setSelectedFile(file);
-    setResult(null);
-    setError(null);
-  };
+  const [altText, setAltText] = useState('');
+  const [category, setCategory] = useState('');
+  const [confidence, setConfidence] = useState('');
 
   const handleAnalyze = async () => {
-    if (!selectedFile) return;
+    if (!fileUrl.trim()) return;
+
+    const parsedConfidence =
+      confidence.trim() === '' ? undefined : Number(confidence);
+
+    if (
+      parsedConfidence !== undefined &&
+      (Number.isNaN(parsedConfidence) || parsedConfidence < 0 || parsedConfidence > 100)
+    ) {
+      setError('Previous model confidence must be a number between 0 and 100.');
+      return;
+    }
 
     setIsLoading(true);
     setError(null);
 
     try {
       const response = await analyzeContent({
-        file: selectedFile,
+        fileUrl: fileUrl.trim(),
         caption: caption || undefined,
         claimedDate: claimedDate || undefined,
         claimedLocation: claimedLocation || undefined,
         sourceUrl: sourceUrl || undefined,
+        altText: altText || undefined,
+        category: category || undefined,
+        confidence: parsedConfidence,
       });
       setResult(response);
     } catch (err: unknown) {
@@ -47,13 +57,25 @@ function App() {
   };
 
   const handleReset = () => {
-    setSelectedFile(null);
+    setFileUrl('');
     setResult(null);
     setError(null);
     setCaption('');
     setClaimedDate('');
     setClaimedLocation('');
     setSourceUrl('');
+    setAltText('');
+    setCategory('');
+    setConfidence('');
+  };
+
+  const isValidUrl = (url: string) => {
+    try {
+      new URL(url);
+      return true;
+    } catch {
+      return false;
+    }
   };
 
   return (
@@ -68,7 +90,7 @@ function App() {
               <p className="text-sm text-gray-500">Content Authenticity Verification</p>
             </div>
           </div>
-          {(selectedFile || result) && (
+          {(fileUrl || result) && (
             <button
               onClick={handleReset}
               className="px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -82,7 +104,7 @@ function App() {
       {/* Main Content */}
       <main className="max-w-4xl mx-auto px-4 py-8">
         {isLoading ? (
-          <Loading fileName={selectedFile?.name || 'file'} />
+          <Loading fileName={fileUrl} />
         ) : result ? (
           <TrustCard 
             data={result.trust_card} 
@@ -91,27 +113,41 @@ function App() {
           />
         ) : (
           <div className="space-y-6">
-            {/* Upload Zone */}
+            {/* File URL Input */}
             <div className="bg-white rounded-xl shadow-lg p-6">
               <h2 className="text-lg font-semibold text-gray-800 mb-4">
-                Upload Content to Verify
+                Enter File URL to Verify
               </h2>
-              <UploadZone onFileSelect={handleFileSelect} isLoading={isLoading} />
+              <div className="relative">
+                <Link className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="url"
+                  value={fileUrl}
+                  onChange={(e) => {
+                    setFileUrl(e.target.value);
+                    setResult(null);
+                    setError(null);
+                  }}
+                  placeholder="https://example.com/image.jpg"
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg"
+                />
+              </div>
+              <p className="text-sm text-gray-500 mt-2">
+                Enter a direct URL to an image, video, audio, or document file
+              </p>
               
-              {selectedFile && (
+              {fileUrl && isValidUrl(fileUrl) && (
                 <div className="mt-4 p-3 bg-blue-50 rounded-lg flex items-center gap-3">
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-800">{selectedFile.name}</p>
-                    <p className="text-sm text-gray-500">
-                      {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-                    </p>
+                  <Link className="w-5 h-5 text-blue-600" />
+                  <div className="flex-1 overflow-hidden">
+                    <p className="font-medium text-gray-800 truncate">{fileUrl}</p>
                   </div>
                 </div>
               )}
             </div>
 
             {/* Context Fields */}
-            {selectedFile && (
+            {fileUrl && isValidUrl(fileUrl) && (
               <div className="bg-white rounded-xl shadow-lg p-6">
                 <h2 className="text-lg font-semibold text-gray-800 mb-4">
                   Context Information (Optional)
@@ -134,7 +170,20 @@ function App() {
                     />
                   </div>
                   
-                  <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Previous Model Alt Text
+                    </label>
+                    <textarea
+                      value={altText}
+                      onChange={(e) => setAltText(e.target.value)}
+                      placeholder="Description generated by a previous model..."
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      rows={3}
+                    />
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Claimed Date
@@ -160,7 +209,36 @@ function App() {
                       />
                     </div>
                   </div>
-                  
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Previous Model Category
+                      </label>
+                      <input
+                        type="text"
+                        value={category}
+                        onChange={(e) => setCategory(e.target.value)}
+                        placeholder="e.g., AI-generated"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Previous Model Confidence
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={confidence}
+                        onChange={(e) => setConfidence(e.target.value)}
+                        placeholder="0-100"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Source URL
@@ -178,7 +256,7 @@ function App() {
                 {/* Analyze Button */}
                 <button
                   onClick={handleAnalyze}
-                  disabled={!selectedFile || isLoading}
+                  disabled={!fileUrl || !isValidUrl(fileUrl) || isLoading}
                   className="w-full mt-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-medium rounded-lg transition-colors"
                 >
                   Analyze Content

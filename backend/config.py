@@ -37,6 +37,7 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 # Analysis Settings
 ANALYSIS_TIMEOUT_SECONDS = 60
 ELA_QUALITY = 90  # JPEG quality for Error Level Analysis
+REVERSE_IMAGE_MAX_RESULTS = 5
 
 # Trust Score Weights
 SCORE_WEIGHTS = {

@@ -1,7 +1,7 @@
 """
 Pydantic models for TrustLens API
 """
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
 from typing import Optional, List, Dict, Any
 from enum import Enum
 
@@ -14,10 +14,14 @@ class VerdictType(str, Enum):
 
 class AnalysisRequest(BaseModel):
     """Request for content analysis"""
+    file_url: HttpUrl = Field(..., description="URL to the media file to analyze")
     caption: Optional[str] = Field(None, description="Caption or claim about the content")
     claimed_date: Optional[str] = Field(None, description="Claimed date of the content")
     claimed_location: Optional[str] = Field(None, description="Claimed location")
     source_url: Optional[str] = Field(None, description="URL source of the content")
+    alt_text: Optional[str] = Field(None, description="Image description from a previous model")
+    category: Optional[str] = Field(None, description="Category predicted by a previous model")
+    confidence: Optional[int] = Field(None, ge=0, le=100, description="Confidence score from a previous model")
 
 
 class ProvenanceResult(BaseModel):
@@ -40,6 +44,9 @@ class ContentAnalysisResult(BaseModel):
     manipulation_detected: bool = False
     ai_generated: bool = False
     confidence: int = 50
+    face_detected: bool = False
+    deepfake_confidence: int = 0
+    deepfake_indicators: List[str] = []
     manipulation_signs: List[str] = []
     ai_generation_signs: List[str] = []
     ela_suspicious: bool = False
