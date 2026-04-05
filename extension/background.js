@@ -47,10 +47,35 @@ async function uploadImageToCloudinary(sourceUrl) {
 
 	const env = await loadEnv();
 	const cloudName = env.CLOUD_NAME || env.CLOUDINARY_CLOUD_NAME || "";
+	const uploadPreset = env.CLOUDINARY_UPLOAD_PRESET || env.UPLOAD_PRESET || "";
 	const apiKey = env.API_KEY || env.CLOUDINARY_API_KEY || "";
 	const apiSecret = env.API_SECRET || env.CLOUDINARY_API_SECRET || "";
-	if (!cloudName || !apiKey || !apiSecret) {
-		throw new Error("Missing Cloudinary credentials in .env for upload");
+
+	if (!cloudName) {
+		throw new Error("Missing CLOUD_NAME/CLOUDINARY_CLOUD_NAME in .env");
+	}
+
+	const endpoint = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
+
+	// Preferred mode for client-side contexts: unsigned preset upload.
+	if (uploadPreset) {
+		const unsignedForm = new FormData();
+		unsignedForm.append("file", sourceUrl);
+		unsignedForm.append("upload_preset", uploadPreset);
+
+		const unsignedResponse = await fetch(endpoint, {
+			method: "POST",
+			body: unsignedForm
+		});
+		const unsignedData = await unsignedResponse.json().catch(() => ({}));
+		if (unsignedResponse.ok && unsignedData.secure_url) {
+			return unsignedData.secure_url;
+		}
+	}
+
+	// Signed upload fallback.
+	if (!apiKey || !apiSecret) {
+		throw new Error("Cloudinary upload preset missing and signed API credentials unavailable");
 	}
 
 	const timestamp = Math.floor(Date.now() / 1000);
@@ -58,7 +83,6 @@ async function uploadImageToCloudinary(sourceUrl) {
 	const toSign = `folder=${folder}&timestamp=${timestamp}${apiSecret}`;
 	const signature = await sha1Hex(toSign);
 
-	const endpoint = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
 	const formData = new FormData();
 	formData.append("file", sourceUrl);
 	formData.append("api_key", apiKey);
@@ -76,6 +100,14 @@ async function uploadImageToCloudinary(sourceUrl) {
 	}
 
 	return data.secure_url;
+}
+
+function buildCloudinaryFetchUrl(sourceUrl) {
+	if (!sourceUrl) return "";
+	if (/res\.cloudinary\.com/i.test(sourceUrl)) return sourceUrl;
+
+	const cloudName = "dq0ut0v89";
+	return `https://res.cloudinary.com/${cloudName}/image/fetch/${encodeURIComponent(sourceUrl)}`;
 }
 
 function sanitizeDoubleQuotes(value) {
@@ -102,15 +134,27 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 	(async () => {
 		try {
 			const payload = { ...(message.payload || {}) };
+			const warnings = [];
 			if (payload.media_type === "image" && payload.media_url) {
-				const uploadedUrl = await uploadImageToCloudinary(payload.media_url);
-				payload.media_url = uploadedUrl;
+				try {
+					const uploadedUrl = await uploadImageToCloudinary(payload.media_url);
+					payload.media_url = uploadedUrl;
+				} catch (uploadError) {
+					const fetchUrl = buildCloudinaryFetchUrl(payload.media_url);
+					if (fetchUrl) {
+						payload.media_url = fetchUrl;
+						warnings.push(`Cloudinary upload failed; used fetch URL fallback. Reason: ${uploadError?.message || String(uploadError)}`);
+					} else {
+						warnings.push(`Cloudinary upload skipped: ${uploadError?.message || String(uploadError)}`);
+					}
+				}
 			}
 
 			const sanitizedPayload = sanitizeDoubleQuotes(payload);
 			const payloadList = [sanitizedPayload];
-
-			const response = await fetch(message.url || WEBHOOK_URL, {
+			const primaryUrl = message.url || WEBHOOK_URL;
+			let usedUrl = primaryUrl;
+			let response = await fetch(primaryUrl, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json"
@@ -118,10 +162,24 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 				body: JSON.stringify(payloadList)
 			});
 
+			if (!response.ok && primaryUrl !== WEBHOOK_URL) {
+				warnings.push(`Primary webhook failed with ${response.status}; retried default webhook URL.`);
+				usedUrl = WEBHOOK_URL;
+				response = await fetch(WEBHOOK_URL, {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json"
+					},
+					body: JSON.stringify(payloadList)
+				});
+			}
+
 			const responseText = await response.text().catch(() => "");
 			sendResponse({
 				ok: response.ok,
 				status: response.status,
+				url: usedUrl,
+				warnings,
 				body: responseText,
 				payload: payloadList
 			});

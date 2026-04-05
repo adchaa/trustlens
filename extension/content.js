@@ -6,6 +6,44 @@
 	const PANEL_CLASS = "ig-post-viewer-panel";
 	const CONTROLS_CLASS = "ig-post-viewer-controls";
 	const WEBHOOK_URL = "https://scoldable-liza-semipervious.ngrok-free.dev/webhook-test/48250631-d225-4a3c-a10b-6fdb2edf046e";
+	const USE_MOCK_RESPONSE = false;
+
+	const MOCK_DEEP_RESPONSE_BODY = {
+		mode: "deep",
+		status: "COMPLETED",
+		post_id: "518200ecd6cc283b645df61b",
+		claim: "Major General Ali Abdullah Ali Abadi said Iran will turn the Strait of Hormuz into the gates of hell.",
+		label: "FALSE",
+		label_color: "red",
+		label_score: null,
+		confidence: 70,
+		summary_bullets: ["No metadata found - possibly stripped"],
+		forensics: {
+			manipulation_detected: false,
+			ai_generated: false,
+			has_metadata: false,
+			suspicious_signs: ["No metadata found - possibly stripped"],
+			ela_suspicious: false
+		},
+		source: {
+			domain: "instagram.com",
+			has_ssl: true,
+			credibility_score: 62
+		},
+		reasoning: "The post is dated April 04, 2026, which is in the future. News searches for 'Ali Abdollahi Ali Abadi Khatam al-Anbiya' yielded no results, indicating this general is not a recognized figure making such statements. While news searches for 'Iran Strait of Hormuz ultimatum Trump' returned numerous articles, these are also dated in March-April 2026, suggesting they are hypothetical or simulated future news. These articles describe a scenario where Donald Trump issues ultimatums to Iran regarding the Strait of Hormuz with 48-hour deadlines, but they do not mention Major General Ali Abdullah Ali Abadi as the source of the threat. Fact-check tools also returned no results for the general's name or the specific 'gates of hell' phrasing in this context. Therefore, the specific attribution of the threat to 'Major General Ali Abdullah Ali Abadi' is unverified and likely fabricated, making the entire claim false, especially considering its future date.",
+		processing_time_ms: 6450
+	};
+
+	const MOCK_NORMAL_RESPONSE_BODY = {
+		mode: "normal",
+		status: "COMPLETED",
+		post_id: "mock_normal_post_001",
+		label: "MIXED",
+		label_color: "orange",
+		confidence: 58,
+		reasoning: "Some parts match known reporting, but key attribution details are missing or inconsistent.",
+		processing_time_ms: 1830
+	};
 
 	function injectStyles() {
 		if (document.getElementById(STYLE_ID)) return;
@@ -18,78 +56,414 @@
 			}
 
 			.${CONTROLS_CLASS} {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				gap: 10px;
+				margin-top: 8px;
+			}
+
+			.deep-mode-toggle {
 				display: inline-flex;
 				align-items: center;
 				gap: 6px;
-				margin-left: 8px;
-				vertical-align: middle;
+				font-size: 12px;
+				font-weight: 600;
+				color: #374151;
+				user-select: none;
 			}
 
-			.${CONTROLS_CLASS} .ig-post-mini-tag {
-				font-size: 10px;
-				font-weight: 700;
-				color: #8a0000;
-				background: #fff2f2;
-				border: 1px solid #ffc9c9;
-				border-radius: 999px;
-				padding: 2px 7px;
+			.deep-mode-toggle input {
+				width: 16px;
+				height: 16px;
+				accent-color: #111827;
 			}
 
 			.${BTN_CLASS} {
-				border: 1px solid #d90000;
-				color: #d90000;
-				background: #fff;
-				border-radius: 999px;
-				font-size: 11px;
-				font-weight: 700;
-				padding: 4px 9px;
+				background: #262626;
+				color: #fff;
+				border: none;
+				border-radius: 6px;
+				font-size: 12px;
+				font-weight: 600;
+				padding: 6px 12px;
 				cursor: pointer;
+				transition: background 0.2s ease;
 			}
 
 			.${BTN_CLASS}:hover {
-				background: #ffeaea;
+				background: #404040;
+			}
+
+			.${BTN_CLASS}:disabled {
+				background: #a3a3a3;
+				cursor: not-allowed;
 			}
 
 			.${PANEL_CLASS} {
 				position: absolute;
 				top: 8px;
-				right: -290px;
-				width: 260px;
-				height: 260px;
+				right: -310px;
+				width: 290px;
+				max-height: 350px;
 				overflow: auto;
-				background: #fff;
-				border: 2px solid #d90000;
-				border-radius: 10px;
-				padding: 10px;
+				background: #ffffff;
+				border: 1px solid #e5e5e5;
+				border-radius: 12px;
+				padding: 14px;
 				box-sizing: border-box;
 				z-index: 20;
-				box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+				box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+				font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+				line-height: 1.5;
+			}
+
+			.${PANEL_CLASS}.fc-deep-mode {
+				right: -360px;
+				width: 340px;
+				max-height: 420px;
+				border-color: #dbeafe;
+				box-shadow: 0 12px 28px rgba(30, 64, 175, 0.16);
+			}
+
+			.${PANEL_CLASS} .ig-post-viewer-panel-body {
+				color: #262626;
+				font-size: 13px;
+			}
+
+			.ig-post-viewer-panel-header {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				gap: 8px;
+				margin-bottom: 8px;
+			}
+
+			.ig-post-viewer-panel-title {
 				font-size: 12px;
-				line-height: 1.4;
+				font-weight: 700;
+				color: #111827;
+			}
+
+			.ig-post-viewer-close {
+				width: 24px;
+				height: 24px;
+				border: 1px solid #e5e7eb;
+				border-radius: 6px;
+				background: #fff;
+				color: #6b7280;
+				font-size: 16px;
+				line-height: 1;
+				cursor: pointer;
+				padding: 0;
+			}
+
+			.ig-post-viewer-close:hover {
+				background: #f9fafb;
+				color: #111827;
+			}
+
+			/* Clean UI Elements for the Result */
+			.fc-badge {
+				display: inline-block;
+				padding: 4px 8px;
+				border-radius: 6px;
+				font-weight: 700;
+				font-size: 11px;
+				margin-bottom: 12px;
+				background: #4b5563;
+				color: #fff;
+				text-transform: uppercase;
+				letter-spacing: 0.5px;
+			}
+			
+			.fc-badge.true, .fc-badge.likely_true { background: #16a34a; }
+			.fc-badge.false, .fc-badge.likely_false { background: #dc2626; }
+			.fc-badge.mixed, .fc-badge.unverified { background: #d97706; }
+			.fc-badge.unknown { background: #4b5563; }
+
+			.fc-result-head {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				gap: 8px;
+				margin-bottom: 10px;
+			}
+
+			.fc-confidence {
+				font-weight: 700;
+				font-size: 12px;
+				color: #111827;
+				white-space: nowrap;
+			}
+
+			.fc-confidence-track {
+				height: 8px;
+				background: #e5e7eb;
+				border-radius: 999px;
+				overflow: hidden;
+				margin-bottom: 12px;
+			}
+
+			.fc-confidence-fill {
+				height: 100%;
+				background: linear-gradient(90deg, #f59e0b 0%, #22c55e 100%);
+				border-radius: 999px;
+			}
+
+			.fc-meta {
+				display: grid;
+				grid-template-columns: 84px 1fr;
+				gap: 4px 8px;
+				font-size: 12px;
+				margin: 10px 0;
+				padding: 8px;
+				border-radius: 8px;
+				background: #fafafa;
+				border: 1px solid #f0f0f0;
+			}
+
+			.fc-meta-key {
+				font-weight: 700;
+				color: #374151;
+			}
+
+			.fc-raw {
+				font-size: 12px;
+				color: #6b7280;
+				background: #f9fafb;
+				border: 1px solid #eceff3;
+				padding: 8px;
+				border-radius: 8px;
+				margin-top: 8px;
 				white-space: pre-wrap;
 				word-break: break-word;
 			}
 
-			.${PANEL_CLASS} .ig-post-viewer-panel-title {
-				color: #d90000;
+			.fc-section {
+				margin-top: 10px;
+				padding-top: 10px;
+				border-top: 1px dashed #e5e7eb;
+			}
+
+			.fc-section-title {
 				font-size: 12px;
 				font-weight: 700;
+				color: #111827;
 				margin-bottom: 6px;
 			}
 
-			.${PANEL_CLASS} .ig-post-viewer-panel-body {
-				background: #fff7f7;
-				border: 1px solid #ffd3d3;
+			.fc-list {
+				margin: 0;
+				padding-left: 16px;
+				color: #374151;
+				font-size: 12px;
+			}
+
+			.fc-list li {
+				margin-bottom: 3px;
+			}
+
+			.fc-claim {
+				font-weight: 600;
+				font-size: 14px;
+				margin-bottom: 8px;
+				color: #111;
+			}
+
+			.fc-reasoning {
+				font-size: 13px;
+				color: #525252;
+				background: #f5f5f5;
+				padding: 10px;
+				border-radius: 8px;
+				margin-top: 8px;
+			}
+
+			.fc-loading {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				color: #525252;
+				font-weight: 500;
+			}
+
+			.fc-error {
+				color: #dc2626;
+				background: #fef2f2;
+				padding: 10px;
+				border-radius: 8px;
+				font-weight: 500;
+			}
+
+			.fc-deep-shell {
+				background: linear-gradient(180deg, #eff6ff 0%, #ffffff 38%);
+				border: 1px solid #dbeafe;
+				border-radius: 10px;
+				padding: 10px;
+			}
+
+			.fc-deep-head {
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				gap: 8px;
+				margin-bottom: 10px;
+			}
+
+			.fc-deep-kicker {
+				font-size: 11px;
+				font-weight: 700;
+				color: #1e40af;
+				text-transform: uppercase;
+				letter-spacing: 0.4px;
+			}
+
+			.fc-deep-score {
+				font-size: 12px;
+				font-weight: 700;
+				color: #1f2937;
+			}
+
+			.fc-deep-grid {
+				display: grid;
+				grid-template-columns: repeat(2, minmax(0, 1fr));
+				gap: 8px;
+				margin-top: 10px;
+			}
+
+			.fc-deep-card {
+				background: #fff;
+				border: 1px solid #e5e7eb;
 				border-radius: 8px;
 				padding: 8px;
 			}
 
-			@media (max-width: 1300px) {
+			.fc-deep-card-title {
+				font-size: 11px;
+				font-weight: 700;
+				color: #374151;
+				margin-bottom: 3px;
+				text-transform: uppercase;
+			}
+
+			.fc-deep-card-value {
+				font-size: 13px;
+				font-weight: 700;
+				color: #111827;
+			}
+
+			.fc-deep-reasoning {
+				margin-top: 10px;
+				background: #ffffff;
+				border: 1px solid #e5e7eb;
+				border-left: 4px solid #1d4ed8;
+				border-radius: 8px;
+				padding: 10px;
+				font-size: 12px;
+				color: #374151;
+			}
+
+			.fc-deep-debug {
+				margin-top: 10px;
+				font-size: 12px;
+			}
+
+			.fc-deep-debug summary {
+				cursor: pointer;
+				font-weight: 700;
+				color: #374151;
+			}
+
+			.fc-normal-shell {
+				background: #ffffff;
+				border: 1px solid #e5e7eb;
+				border-radius: 10px;
+				padding: 10px;
+			}
+
+			.fc-normal-lead {
+				font-size: 12px;
+				font-weight: 700;
+				text-transform: uppercase;
+				letter-spacing: 0.35px;
+				color: #374151;
+				margin-bottom: 8px;
+			}
+
+			.fc-kv-grid {
+				display: grid;
+				grid-template-columns: repeat(2, minmax(0, 1fr));
+				gap: 8px;
+				margin-top: 10px;
+			}
+
+			.fc-kv-box {
+				background: #f9fafb;
+				border: 1px solid #edf0f3;
+				border-radius: 8px;
+				padding: 8px;
+			}
+
+			.fc-kv-box-wide {
+				grid-column: 1 / -1;
+				min-height: 74px;
+			}
+
+			.fc-kv-label {
+				font-size: 11px;
+				font-weight: 700;
+				color: #6b7280;
+				text-transform: uppercase;
+				margin-bottom: 3px;
+			}
+
+			.fc-kv-value {
+				font-size: 12px;
+				font-weight: 600;
+				color: #111827;
+				word-break: break-word;
+			}
+
+			.fc-evidence-block {
+				margin-top: 10px;
+				border: 1px solid #edf0f3;
+				border-radius: 8px;
+				padding: 8px;
+				background: #fcfcfd;
+			}
+
+			.fc-evidence-item + .fc-evidence-item {
+				margin-top: 8px;
+				padding-top: 8px;
+				border-top: 1px dashed #e5e7eb;
+			}
+
+			.fc-evidence-key {
+				font-size: 11px;
+				font-weight: 700;
+				text-transform: uppercase;
+				color: #374151;
+				margin-bottom: 4px;
+			}
+
+			.fc-evidence-text {
+				font-size: 12px;
+				color: #374151;
+				line-height: 1.45;
+			}
+
+			@media (max-width: 1350px) {
 				.${PANEL_CLASS} {
-					right: 8px;
+					right: 12px;
 					top: 52px;
-					width: 230px;
-					height: 220px;
+					width: 260px;
+				}
+
+				.${PANEL_CLASS}.fc-deep-mode {
+					right: 12px;
+					top: 52px;
+					width: 300px;
 				}
 			}
 		`;
@@ -155,13 +529,50 @@
 		return text.trim();
 	}
 
+	function extractClaimedDate(text, fallbackDate) {
+		const source = (text || "").replace(/\s+/g, " ").trim();
+		if (!source) return fallbackDate || "";
+
+		const isoMatch = source.match(/\b(\d{4}-\d{2}-\d{2})\b/);
+		if (isoMatch?.[1]) return isoMatch[1];
+
+		const slashMatch = source.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{2,4})\b/);
+		if (slashMatch) {
+			const mm = slashMatch[1].padStart(2, "0");
+			const dd = slashMatch[2].padStart(2, "0");
+			const yyyy = slashMatch[3].length === 2 ? `20${slashMatch[3]}` : slashMatch[3];
+			return `${yyyy}-${mm}-${dd}`;
+		}
+
+		const writtenMatch = source.match(/\b(?:jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)\s+\d{1,2}(?:st|nd|rd|th)?(?:,\s*\d{4})?\b/i);
+		if (writtenMatch?.[0]) return writtenMatch[0].trim();
+
+		return fallbackDate || "";
+	}
+
+	function extractClaimedLocation(text) {
+		const source = (text || "").replace(/\s+/g, " ").trim();
+		if (!source) return "";
+
+		const pinMatch = source.match(/(?:📍|location\s*[:\-]?\s*)([^.,;|\n]{2,80})/i);
+		if (pinMatch?.[1]) return pinMatch[1].trim();
+
+		const prepositionMatch = source.match(/\b(?:in|at|from)\s+([A-Z][A-Za-z'’.-]*(?:\s+[A-Z][A-Za-z'’.-]*){0,4})\b/);
+		if (prepositionMatch?.[1]) {
+			const candidate = prepositionMatch[1].trim();
+			if (!/\b(?:Instagram|Reels?|Post|Video|Photo)\b/i.test(candidate)) {
+				return candidate;
+			}
+		}
+
+		return "";
+	}
+
 	function sanitizePageTitle(rawTitle, username) {
 		let text = (rawTitle || "").replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, "").replace(/\s+/g, " ").trim();
 		if (!text) return "";
 
 		text = text.replace(/\s*[|-]\s*Instagram\s*$/i, "").trim();
-
-		// Keep only the profile/title part, drop the post caption after "on Instagram".
 		text = text.replace(/\s*on\s+Instagram\b[\s:："'“”«»].*$/i, "").trim();
 		text = text.replace(/\s*on\s+Instagram\s*$/i, "").trim();
 
@@ -306,7 +717,6 @@
 			}
 		});
 
-		// Try to read post date from the article's time element first
 		let postDate = article.querySelector('time')?.getAttribute('datetime') || article.querySelector('time')?.textContent?.trim() || "";
 
 		if (!caption) {
@@ -320,12 +730,11 @@
 
 		const remoteMeta = await fetchPostMeta(permalink);
 
-		// If we didn't get a date from the article, use the remote meta
 		if (!postDate && remoteMeta.publishedTime) postDate = remoteMeta.publishedTime;
 
-		// Determine if profile is private by fetching profile page
 		const profileHref = article.querySelector("header a")?.href || article.querySelector("a[role='link']")?.href || "";
 		const isPrivate = profileHref ? await fetchProfilePrivate(profileHref) : false;
+		
 		if (remoteMeta.ogTitle) {
 			sourceTitle = sanitizePageTitle(remoteMeta.ogTitle, username) || sourceTitle;
 		} else if (remoteMeta.pageTitle) {
@@ -340,10 +749,12 @@
 			}
 		}
 
-		const description = caption || "No description found.";
+		const captionText = caption || "No description found.";
+		const claimedDate = extractClaimedDate(captionText, postDate);
+		const claimedLocation = extractClaimedLocation(`${captionText} ${altTexts.join(" ")}`);
 		const originalImageUrl = imageUrl;
 		const cloudinaryImageUrl = toCloudinaryImageUrl(originalImageUrl);
-		const postId = await generatePostId(description, sourceTitle, postDate);
+		const postId = await generatePostId(captionText, sourceTitle, postDate);
 
 		const altTextsUnique = Array.from(new Set(altTexts));
 		const mediaType = isVideo && videoUrl ? "video" : imageUrl ? "image" : "unknown";
@@ -352,7 +763,7 @@
 			sourceTitle,
 			username,
 			permalink,
-			description,
+			caption: captionText,
 			post_id: postId,
 			isVideo,
 			videoUrl,
@@ -360,10 +771,172 @@
 			cloudinaryImageUrl,
 			altTexts: altTextsUnique,
 			postDate,
+			claimedDate,
+			claimedLocation,
 			isPrivate,
 			mediaType
 		};
 	}
+
+	function buildWebhookPayload(data, deepModeEnabled = false) {
+		const mediaUrl = data.mediaType === "video" ? data.videoUrl || "" : data.imageUrl || "";
+		const altText = Array.isArray(data.altTexts) ? data.altTexts.join(" | ") : "";
+		return {
+			post_id: data.post_id || "",
+			title: data.sourceTitle || data.username || "",
+			caption: data.caption || "",
+			alt_text: altText || data.caption || "",
+			is_private: Boolean(data.isPrivate),
+			media_type: data.mediaType || "unknown",
+			media_url: mediaUrl,
+			claimed_date: data.claimedDate || data.postDate || "",
+			claimed_location: data.claimedLocation || "",
+			deep_mode: Boolean(deepModeEnabled)
+		};
+	}
+
+	async function sendPostPayloadToWebhook(data, deepModeEnabled = false) {
+		const payload = buildWebhookPayload(data, deepModeEnabled);
+		try {
+			const result = await chrome.runtime.sendMessage({
+				type: "SEND_POST_PAYLOAD",
+				url: WEBHOOK_URL,
+				payload
+			});
+			return result || { ok: false, error: "No response from webhook relay" };
+		} catch (error) {
+			return { ok: false, error: error?.message || String(error) };
+		}
+	}
+
+	function getMockWebhookResponse(deepModeEnabled = false) {
+		return {
+			ok: true,
+			status: 200,
+			url: "mock://local-preview",
+			body: deepModeEnabled ? MOCK_DEEP_RESPONSE_BODY : MOCK_NORMAL_RESPONSE_BODY
+		};
+	}
+
+	function escapeHtml(value) {
+		return String(value || "")
+			.replace(/&/g, "&amp;")
+			.replace(/</g, "&lt;")
+			.replace(/>/g, "&gt;");
+	}
+
+	function unwrapAnalysisResponse(input) {
+		if (!input || typeof input !== "object") return null;
+
+		if (input.trust_card) return input;
+
+		const candidateKeys = [
+			"analysis_response",
+			"AnalysisResponse",
+			"ANALYSERESPONSE",
+			"analyseresponse",
+			"result",
+			"data",
+			"output",
+			"response"
+		];
+
+		for (const key of candidateKeys) {
+			const value = input[key];
+			if (value && typeof value === "object") {
+				if (value.trust_card) return value;
+				const nested = unwrapAnalysisResponse(value);
+				if (nested) return nested;
+			}
+		}
+
+		if (Array.isArray(input) && input.length) {
+			for (const item of input) {
+				const nested = unwrapAnalysisResponse(item);
+				if (nested) return nested;
+			}
+		}
+
+		for (const value of Object.values(input)) {
+			if (value && typeof value === "object") {
+				const nested = unwrapAnalysisResponse(value);
+				if (nested) return nested;
+			}
+		}
+
+		return input;
+	}
+
+	function tryParseJsonFromText(text) {
+		if (!text || typeof text !== "string") return null;
+
+		try {
+			return JSON.parse(text);
+		} catch {
+			const firstBrace = text.indexOf("{");
+			const lastBrace = text.lastIndexOf("}");
+			if (firstBrace >= 0 && lastBrace > firstBrace) {
+				const candidate = text.slice(firstBrace, lastBrace + 1);
+				try {
+					return JSON.parse(candidate);
+				} catch {
+					return null;
+				}
+			}
+			return null;
+		}
+	}
+
+	function normalizeReplyFields(responseData = {}) {
+		const toolEvidence = (responseData.tool_evidence && typeof responseData.tool_evidence === "object")
+			? responseData.tool_evidence
+			: {};
+
+		return {
+			post_id: responseData.post_id,
+			claim_detected: responseData.claim_detected,
+			category: responseData.category,
+			confidence: responseData.confidence,
+			reasoning: responseData.reasoning,
+			fact_check: responseData.fact_check ?? toolEvidence.fact_check,
+			news_sources: responseData.news_sources ?? toolEvidence.news_sources,
+			caption: responseData.caption,
+			alt_text: responseData.alt_text,
+			deep_mode: responseData.deep_mode,
+			claimed_date: responseData.claimed_date,
+			claimed_location: responseData.claimed_location,
+			media_url: responseData.media_url
+		};
+	}
+
+	function warnMissingReplyFields(normalizedReply) {
+		const requiredKeys = [
+			"post_id",
+			"claim_detected",
+			"category",
+			"confidence",
+			"reasoning",
+			"fact_check",
+			"news_sources",
+			"caption",
+			"alt_text",
+			"deep_mode",
+			"claimed_date",
+			"claimed_location",
+			"media_url"
+		];
+
+		const missing = requiredKeys.filter((key) => {
+			const value = normalizedReply[key];
+			return value == null || (typeof value === "string" && value.trim() === "");
+		});
+
+		if (missing.length) {
+			console.warn("API reply is missing expected fields:", missing, normalizedReply);
+		}
+	}
+
+	// --- CLEAN UI RENDERING ---
 
 	function getOrCreateFloatingPanel(article) {
 		if (!article) return null;
@@ -372,104 +945,256 @@
 			panel = document.createElement("div");
 			panel.className = PANEL_CLASS;
 			panel.innerHTML = `
-				<div class="ig-post-viewer-panel-title">Post Output</div>
-				<div class="ig-post-viewer-panel-body">Click "Show Post" to fetch and send data.</div>
+				<div class="ig-post-viewer-panel-header">
+					<div class="ig-post-viewer-panel-title">Fact Check</div>
+					<button type="button" class="ig-post-viewer-close" data-role="panel-close-btn" aria-label="Close">&times;</button>
+				</div>
+				<div class="ig-post-viewer-panel-body">Click "Analyze Post" to run fact check.</div>
+				<div class="${CONTROLS_CLASS}">
+					<label class="deep-mode-toggle" title="Enable deeper analysis">
+						<input type="checkbox" data-role="deep-mode-toggle" />
+						<span>Deep Mode</span>
+					</label>
+					<button type="button" class="${BTN_CLASS}" data-role="show-post-btn">Analyze Post</button>
+				</div>
 			`;
 			article.appendChild(panel);
 		}
 		return panel;
 	}
 
-	function buildWebhookPayload(data) {
-		const mediaUrl = data.mediaType === "video" ? data.videoUrl || "" : data.imageUrl || "";
-		const altText = Array.isArray(data.altTexts) ? data.altTexts.join(" | ") : "";
-		return {
-			post_id: data.post_id || "",
-			caption: data.description || "",
-			alt_text: altText || data.description || "",
-			is_private: Boolean(data.isPrivate),
-			media_type: data.mediaType || "unknown",
-			media_url: mediaUrl,
-			claimed_date: data.postDate || "",
-			claimed_location: "",
-			deep_mode: false
-		};
-	}
+	function resetPanelToDefault(article) {
+		const panel = getOrCreateFloatingPanel(article);
+		if (!panel) return;
 
-	async function sendPostPayloadToWebhook(data) {
-		const payload = buildWebhookPayload(data);
-		try {
-			const result = await chrome.runtime.sendMessage({
-				type: "SEND_POST_PAYLOAD",
-				url: WEBHOOK_URL,
-				payload
-			});
-			if (!result?.ok) {
-				console.warn("Webhook POST failed", result);
-			}
-			return result || { ok: false, error: "No response from webhook relay" };
-		} catch (error) {
-			console.warn("Webhook POST error", error);
-			return {
-				ok: false,
-				error: error?.message || String(error)
-			};
+		panel.classList.remove("fc-deep-mode");
+		const panelBody = panel.querySelector(".ig-post-viewer-panel-body");
+		if (panelBody) {
+			panelBody.textContent = 'Click "Analyze Post" to run fact check.';
+		}
+
+		const button = panel.querySelector('[data-role="show-post-btn"]');
+		if (button) {
+			button.disabled = false;
+			button.textContent = "Analyze Post";
 		}
 	}
 
-	function renderResultInPanel(article, result) {
+	function renderSendingState(article) {
 		const panel = getOrCreateFloatingPanel(article);
 		if (!panel) return;
-		const bodyText = typeof result?.body === "string" && result.body
-			? result.body
-			: JSON.stringify(result || {}, null, 2);
-		panel.innerHTML = `
-			<div class="ig-post-viewer-panel-title">Webhook Response</div>
-			<div class="ig-post-viewer-panel-body">${`Status: ${result?.status ?? "N/A"}\nSuccess: ${result?.ok ? "Yes" : "No"}\n\n${bodyText}`.replace(/</g, "&lt;")}</div>
-		`;
+		const panelBody = panel.querySelector(".ig-post-viewer-panel-body");
+		if (panelBody) {
+			panelBody.innerHTML = `
+				<div class="fc-loading">
+					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+					Analyzing claim...
+				</div>
+			`;
+		}
 	}
 
-	function findButtonContainer(article) {
-		const header = article.querySelector("header");
-		if (!header) return article;
-		const nameAnchor = header.querySelector("a") || header.querySelector("h2") || header.firstElementChild;
-		return nameAnchor?.parentElement || header;
+	function renderResultInPanel(article, result, deepModeEnabled = false, requestPayload = null, extractedPostData = null) {
+		const panel = getOrCreateFloatingPanel(article);
+		if (!panel) return;
+		
+		const panelBody = panel.querySelector(".ig-post-viewer-panel-body");
+		if (!panelBody) return;
+
+		// Handle Request Error
+		if (!result || !result.ok) {
+			panel.classList.remove("fc-deep-mode");
+			panelBody.innerHTML = `
+				<div class="fc-error">
+					Fact check failed: ${escapeHtml(result?.error || "Unknown error")}${result?.status ? ` (Status ${escapeHtml(result.status)})` : ""}
+				</div>
+			`;
+			return;
+		}
+
+		let responseData = {};
+		const rawBody = typeof result.body === "string" ? result.body.trim() : "";
+		if (result.body && typeof result.body === "object") {
+			responseData = result.body;
+		} else if (rawBody) {
+			responseData = tryParseJsonFromText(rawBody) || { raw_body: rawBody };
+		}
+		responseData = responseData || {};
+		const normalizedReply = normalizeReplyFields(responseData);
+		console.log("Normalized API reply fields:", normalizedReply);
+		warnMissingReplyFields(normalizedReply);
+
+		const trustCard = responseData?.trust_card || null;
+		const categoryStr = String(normalizedReply.category || "").toUpperCase();
+		const categoryClass = categoryStr ? categoryStr.toLowerCase() : "unknown";
+		const confidenceRaw = normalizedReply.confidence;
+		const confidenceNumeric = Number.isFinite(Number(confidenceRaw))
+			? Number(confidenceRaw)
+			: null;
+		const confidencePercent = confidenceNumeric == null
+			? null
+			: confidenceNumeric <= 1
+				? Math.round(confidenceNumeric * 100)
+				: Math.max(0, Math.min(100, Math.round(confidenceNumeric)));
+		const confidence = confidencePercent == null ? "N/A" : `${confidencePercent}%`;
+		const displayCategory = categoryStr ? categoryStr.replace(/_/g, " ") : "-";
+		const reasoning = normalizedReply.reasoning || "";
+		const bodyPreview = rawBody || "(empty response body)";
+		const processingTime = responseData.processing_time_ms;
+		const responseMode = responseData.mode;
+		const responseStatus = responseData.status;
+		const claimedDateValue = normalizedReply.claimed_date || "-";
+		const factCheckValue = normalizedReply.fact_check || "-";
+		const newsSourcesValue = normalizedReply.news_sources || "-";
+		const labelColor = String(responseData.label_color || "").toLowerCase();
+		const badgeInlineStyle = labelColor
+			? ` style="background:${labelColor === "red" ? "#dc2626" : labelColor === "green" ? "#16a34a" : labelColor === "orange" ? "#d97706" : labelColor === "yellow" ? "#ca8a04" : labelColor};"`
+			: "";
+
+		const renderBool = (value) => value === true ? "Yes" : value === false ? "No" : "N/A";
+		const renderList = (items = []) => Array.isArray(items) && items.length
+			? `<ul class="fc-list">${items.map((item) => `<li>${escapeHtml(typeof item === "string" ? item : JSON.stringify(item))}</li>`).join("")}</ul>`
+			: `<div class="fc-raw">No items</div>`;
+		const renderField = (label, value) => `
+			<div class="fc-kv-box">
+				<div class="fc-kv-label">${escapeHtml(label)}</div>
+				<div class="fc-kv-value">${escapeHtml(value == null || value === "" ? "-" : String(value))}</div>
+			</div>
+		`;
+		const renderWideField = (label, value) => `
+			<div class="fc-kv-box fc-kv-box-wide">
+				<div class="fc-kv-label">${escapeHtml(label)}</div>
+				<div class="fc-kv-value">${escapeHtml(value == null || value === "" ? "-" : String(value))}</div>
+			</div>
+		`;
+
+		const isDeepResponse = deepModeEnabled
+			|| String(responseMode || "").toLowerCase() === "deep"
+			|| Boolean(trustCard);
+
+		if (isDeepResponse) {
+			panel.classList.add("fc-deep-mode");
+			const deepLabel = responseData.label || "-";
+			const deepLabelClass = String(deepLabel).toLowerCase();
+			const deepLabelDisplay = String(deepLabel).toUpperCase();
+			const deepConfidence = responseData.confidence;
+			const deepConfidenceDisplay = deepConfidence == null ? "-" : String(deepConfidence);
+			const deepClaimedDate = extractedPostData?.claimedDate || extractedPostData?.postDate || "-";
+			const aiGeneratedRaw = responseData.forensics?.ai_generated;
+			const aiGeneratedDisplay = aiGeneratedRaw === true ? "Yes" : aiGeneratedRaw === false ? "No" : "-";
+			const labelScoreRaw = responseData.label_score;
+			const labelScoreDisplay = labelScoreRaw == null ? "-" : String(labelScoreRaw);
+			const labelScoreNumeric = Number(labelScoreRaw);
+			const labelScorePercent = Number.isFinite(labelScoreNumeric)
+				? Math.max(0, Math.min(100, Math.round(labelScoreNumeric <= 1 ? labelScoreNumeric * 100 : labelScoreNumeric)))
+				: 0;
+
+			panelBody.innerHTML = `
+				<div class="fc-deep-shell">
+					<div class="fc-deep-head">
+						<div class="fc-deep-kicker">Deep Mode Analysis</div>
+						<div class="fc-deep-score">Confidence: ${escapeHtml(deepConfidenceDisplay)}</div>
+					</div>
+					<div class="fc-result-head">
+						<div class="fc-badge ${deepLabelClass}"${badgeInlineStyle}>${escapeHtml(deepLabelDisplay)}</div>
+						<div class="fc-confidence">${escapeHtml(String(responseStatus || "COMPLETED"))}</div>
+					</div>
+					<div class="fc-confidence-track">
+						<div class="fc-confidence-fill" style="width: ${labelScorePercent}%;"></div>
+					</div>
+
+					<div class="fc-kv-grid">
+						${renderField("label", deepLabelDisplay)}
+						${renderField("claimed date", deepClaimedDate)}
+						${renderField("ai_generated", aiGeneratedDisplay)}
+						${renderField("label_score", labelScoreDisplay)}
+					</div>
+
+					${reasoning ? `<div class="fc-deep-reasoning">${escapeHtml(reasoning)}</div>` : ""}
+
+				</div>
+			`;
+			return;
+		}
+
+		panel.classList.remove("fc-deep-mode");
+
+		panelBody.innerHTML = `
+			<div class="fc-normal-shell">
+				<div class="fc-normal-lead">Fact Check Result</div>
+				<div class="fc-result-head">
+					<div class="fc-badge ${categoryClass}"${badgeInlineStyle}>${displayCategory}</div>
+					<div class="fc-confidence">Confidence: ${escapeHtml(normalizedReply.confidence != null ? String(normalizedReply.confidence) : confidence)}</div>
+				</div>
+				<div class="fc-confidence-track">
+					<div class="fc-confidence-fill" style="width: ${confidencePercent == null ? 0 : confidencePercent}%;"></div>
+				</div>
+
+				<div class="fc-kv-grid">
+					${renderField("category", normalizedReply.category || categoryStr)}
+					${renderField("claimed date", claimedDateValue)}
+					${renderWideField("fact_check", factCheckValue)}
+					${renderWideField("news_sources", newsSourcesValue)}
+				</div>
+			</div>
+		`;
 	}
 
 	function addButtonToArticle(article) {
 		if (!article || article.dataset.igPostViewerButtonAdded === "1") return;
 
-		const container = findButtonContainer(article);
-		if (!container) return;
+		const panel = getOrCreateFloatingPanel(article);
+		if (!panel) return;
 
-		const controls = document.createElement("span");
-		controls.className = CONTROLS_CLASS;
+		const button = panel.querySelector('[data-role="show-post-btn"]');
+		const deepModeToggle = panel.querySelector('[data-role="deep-mode-toggle"]');
+		const closeBtn = panel.querySelector('[data-role="panel-close-btn"]');
 
-		const tagA = document.createElement("span");
-		tagA.className = "ig-post-mini-tag";
-		tagA.textContent = "Extractor";
+		if (closeBtn && closeBtn.dataset.bound !== "1") {
+			closeBtn.addEventListener("click", (event) => {
+				event.preventDefault();
+				event.stopPropagation();
+				resetPanelToDefault(article);
+			});
+			closeBtn.dataset.bound = "1";
+		}
 
-		const tagB = document.createElement("span");
-		tagB.className = "ig-post-mini-tag";
-		tagB.textContent = "Webhook";
+		if (deepModeToggle && deepModeToggle.dataset.bound !== "1") {
+			deepModeToggle.addEventListener("change", (event) => {
+				const checkbox = event.target;
+				if (!checkbox?.checked) return;
+				const accepted = window.confirm("Deep Mode is a subscriber feature. Click OK to continue anyway (mock).\n\nDo you want to proceed?");
+				if (!accepted) {
+					checkbox.checked = false;
+				}
+			});
+			deepModeToggle.dataset.bound = "1";
+		}
 
-		const button = document.createElement("button");
-		button.type = "button";
-		button.className = BTN_CLASS;
-		button.textContent = "Show Post";
+		if (!button || button.dataset.bound === "1") {
+			article.dataset.igPostViewerButtonAdded = "1";
+			return;
+		}
+
 		button.addEventListener("click", async (event) => {
 			event.preventDefault();
 			event.stopPropagation();
-			const data = await extractPostData(article);
-			const response = await sendPostPayloadToWebhook(data);
-			renderResultInPanel(article, response);
-		});
+			button.disabled = true;
+			button.textContent = "Analyzing...";
+			const deepModeEnabled = Boolean(deepModeToggle?.checked);
 
-		controls.appendChild(tagA);
-		controls.appendChild(tagB);
-		controls.appendChild(button);
-		container.appendChild(controls);
-		getOrCreateFloatingPanel(article);
+			const data = await extractPostData(article);
+			console.log("Extracted post data:", data);
+			const requestPayload = buildWebhookPayload(data, deepModeEnabled);
+			renderSendingState(article);
+			const response = USE_MOCK_RESPONSE
+				? getMockWebhookResponse(deepModeEnabled)
+				: await sendPostPayloadToWebhook(data, deepModeEnabled);
+			renderResultInPanel(article, response, deepModeEnabled, requestPayload, data);
+			button.disabled = false;
+			button.textContent = "Analyze Again";
+		});
+		button.dataset.bound = "1";
 		article.dataset.igPostViewerButtonAdded = "1";
 	}
 
@@ -489,8 +1214,15 @@
 			childList: true,
 			subtree: true
 		});
-
-		// No modal behavior: results are displayed in floating per-post panels.
+		
+		// Setup simple spinner animation in style tag
+		const style = document.getElementById(STYLE_ID);
+		if (style && !style.textContent.includes('@keyframes spin')) {
+			style.textContent += `
+				@keyframes spin { 100% { transform: rotate(360deg); } }
+				.spin { animation: spin 1s linear infinite; }
+			`;
+		}
 	}
 
 	if (document.readyState === "loading") {

@@ -1,4 +1,4 @@
-# TrustLens - Content Authenticity Verification
+/home/diden/Desktop/final/background.js# TrustLens - Content Authenticity Verification
 
 A hackathon project for verifying digital content authenticity, detecting manipulation, AI-generated content, and misinformation.
 
