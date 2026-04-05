@@ -2,6 +2,9 @@
 
 A misinformation detection system that analyzes social media posts (currently Instagram) for authenticity. It combines AI-powered content analysis, fact-checking APIs, and forensic techniques to generate trust scores.
 
+# presentation link
+https://www.canva.com/design/DAHF9Qwpa3Y/fubTfUgkV-lDdhFiLtF0YA/edit
+
 ## Architecture Overview
 
 ```
